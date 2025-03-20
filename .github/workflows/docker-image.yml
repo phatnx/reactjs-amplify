@@ -1,0 +1,63 @@
+name: ECR Build, Push, and Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set build number
+        id: set_build_number
+        run: echo "::set-output name=BUILD_NUMBER::${GITHUB_RUN_NUMBER}"
+
+      - name: Login to Amazon ECR
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 373965530174.dkr.ecr.ap-southeast-2.amazonaws.com
+
+      - name: Build Docker image
+        run: |
+          docker build -t reactjsecr:${{ steps.set_build_number.outputs.BUILD_NUMBER }} .
+
+      - name: Tag Docker image for ECR
+        run: |
+          docker tag reactjsecr:${{ steps.set_build_number.outputs.BUILD_NUMBER }} 373965530174.dkr.ecr.ap-southeast-2.amazonaws.com/reactjsecr:${{ steps.set_build_number.outputs.BUILD_NUMBER }}
+
+      - name: Push Docker image to Amazon ECR
+        run: |
+          docker push 373965530174.dkr.ecr.ap-southeast-2.amazonaws.com/reactjsecr:${{ steps.set_build_number.outputs.BUILD_NUMBER }}
+
+  deploy:
+    name: Deploy Docker Image
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Set build number
+        id: set_build_number
+        run: echo "::set-output name=BUILD_NUMBER::${GITHUB_RUN_NUMBER}"
+
+      - name: Login to Amazon ECR
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 373965530174.dkr.ecr.ap-southeast-2.amazonaws.com
+
+      - name: Pull Docker image from Docker Hub
+        run: |
+          docker pull 373965530174.dkr.ecr.ap-southeast-2.amazonaws.com/reactjsecr:${{ steps.set_build_number.outputs.BUILD_NUMBER }}
+
+      - name: Stop and remove existing container
+        run: |
+          docker stop my_app || true && docker rm my_app || true
+
+      - name: Run Docker container
+        run: |
+          docker run -d -p 3000:3000 --name my_app 373965530174.dkr.ecr.ap-southeast-2.amazonaws.com/reactjsecr:${{ steps.set_build_number.outputs.BUILD_NUMBER }} npm start
