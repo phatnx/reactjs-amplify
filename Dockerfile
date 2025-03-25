@@ -1,11 +1,19 @@
-FROM node:18 as build
-WORKDIR /app
-COPY . .
+FROM node:18
+
+# Working dir
+WORKDIR /usr/src/app
+
+# Copy files from Build
+COPY package*.json ./
+
+# Install Files
 RUN npm install
+
+# Copy SRC
+COPY . .
+
+# Build
 RUN npm run build
 
-# Stage 2: Serve the app using Nginx
-FROM nginx:alpine
-COPY --from=build /app/build /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# Open Port
+EXPOSE 3000
